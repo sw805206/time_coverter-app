@@ -8,7 +8,7 @@
   // Constants
   // ---------------------------------------------------------------
   var MINUTES_DAY = 1440;
-  var BLOCK_PX = 32;              // pixel height of one duration block
+  var BLOCK_PX = 48;              // pixel height of one duration block
   var SNAP = 30;                  // zone boundary snap, in minutes
   var COLORS = ['red', 'yellow', 'lgreen', 'dgreen'];
 
@@ -468,7 +468,18 @@
     if (!marker) return;
     if (cur == null) { var t = getTimeInTz(homeCity.timezone); cur = t.h * 60 + t.m; }
     marker.style.top = Math.round(offsetMinutes(cur) * pxPerMin()) + 'px';
-    if (pill) pill.textContent = formatHM(cur);
+    if (pill) {
+      pill.textContent = formatHM(cur);
+      // Align the pill's left edge with the axis time labels' left edge so the
+      // pill replaces the label in the same column (labels are right-aligned).
+      var wrap = document.getElementById('timeline-wrap');
+      var lab = document.querySelector('#timeline-labels .timeline__time-label');
+      if (wrap && lab) {
+        var wr = wrap.getBoundingClientRect();
+        var lr = lab.getBoundingClientRect();
+        if (wr.width > 0) pill.style.left = Math.round(lr.left - wr.left) + 'px';
+      }
+    }
   }
 
   // Recompute the bar start each tick; re-render the timeline only when the

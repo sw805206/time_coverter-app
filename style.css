@@ -455,7 +455,7 @@ html, body {
 
 .now-marker__pill {
   position: absolute;
-  left: 0;
+  /* left offset is set in app.js to align with the axis time labels */
   top: 50%;
   transform: translateY(-50%);
   background: #111111;
