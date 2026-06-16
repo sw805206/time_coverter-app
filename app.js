@@ -90,7 +90,10 @@
       tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     } catch (e) { /* keep UTC */ }
 
-    var match = cities.filter(function (c) { return c.timezone === tz; })[0];
+    var inTz = cities.filter(function (c) { return c.timezone === tz; });
+    // Prefer the canonical city for this timezone; otherwise fall back to the
+    // first alphabetical match.
+    var match = inTz.filter(function (c) { return c.preferred === true; })[0] || inTz[0];
     if (match) {
       homeCity = match;
     } else {
