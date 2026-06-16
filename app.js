@@ -7,9 +7,8 @@
   // ---------------------------------------------------------------
   // Constants
   // ---------------------------------------------------------------
-  var TIMELINE_PX = 480;          // total timeline height (24h)
   var MINUTES_DAY = 1440;
-  var PX_PER_MIN = TIMELINE_PX / MINUTES_DAY; // = 1/3 px per minute (20px/hour)
+  var BLOCK_PX = 24;              // pixel height of one duration block
   var SNAP = 30;                  // zone boundary snap, in minutes
   var COLORS = ['red', 'yellow', 'lgreen', 'dgreen'];
 
@@ -32,8 +31,9 @@
   var homeCity = { iata: 'UTC', city: 'Universal Time', timezone: 'UTC' };
   var selectedDate = null;        // 'yyyy-mm-dd'
   var dateManuallySet = false;
-  var duration = 30;
+  var duration = 60;             // default meeting duration
   var zones = cloneZones(DEFAULT_ZONES);
+  var startMin = 0;              // bar top = current time rounded down to a block
   var nowTimer = null;
 
   function cloneZones(z) {
@@ -190,60 +190,123 @@
 
   function cycleDuration() {
     duration = duration >= 120 ? 30 : duration + 30;
+    computeStartMin();
     renderDuration();
     renderTimeLabels();
-    renderGridlines(document.getElementById('timeline-bar'));
+    renderZones();
+    positionNowMarker();
   }
 
   // ---------------------------------------------------------------
   // Availability zone editor
   // ---------------------------------------------------------------
-  function px(minutes) { return Math.round(minutes * PX_PER_MIN); }
+  // Geometry — height scales with the selected duration (24px per block).
+  function pxPerMin() { return BLOCK_PX / duration; }
+  function totalHeight() { return (MINUTES_DAY / duration) * BLOCK_PX; }
+
+  // Pixel offset (from the bar top) of an absolute minute-of-day, accounting
+  // for the bar starting at startMin and wrapping past midnight.
+  function offsetMinutes(absMin) {
+    return ((absMin - startMin) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+  }
+  // Convert a pointer offset (px from bar top) back to an absolute minute-of-day.
+  function pixelToAbsMin(y) {
+    return ((startMin + y / pxPerMin()) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+  }
+
+  // Start the bar at the current home-city time, rounded DOWN to a full block.
+  function computeStartMin() {
+    var t = getTimeInTz(homeCity.timezone);
+    var cur = t.h * 60 + t.m;
+    startMin = Math.floor(cur / duration) * duration;
+  }
+
+  function zoneIndexAt(absMin) {
+    for (var i = 0; i < zones.length; i++) {
+      if (absMin >= zones[i].start && absMin < zones[i].end) return i;
+    }
+    return zones.length - 1;
+  }
+
+  // Walk 24h forward from startMin, producing the visible (possibly wrapped)
+  // segments. The zone containing startMin is split across the top/bottom seam.
+  function buildVisualSegments() {
+    var segs = [];
+    var cursor = ((startMin % MINUTES_DAY) + MINUTES_DAY) % MINUTES_DAY;
+    var remaining = MINUTES_DAY;
+    var guard = 0;
+    while (remaining > 0 && guard++ < 1000) {
+      var idx = zoneIndexAt(cursor);
+      var avail = zones[idx].end - cursor;
+      if (avail <= 0) { cursor = 0; continue; }
+      var len = Math.min(avail, remaining);
+      segs.push({ color: zones[idx].color, lenMin: len, zoneIndex: idx, endsAtZoneBoundary: (len === avail) });
+      cursor = (cursor + len) % MINUTES_DAY;
+      remaining -= len;
+    }
+    return segs;
+  }
 
   var pendingClick = null;
 
   function renderZones() {
     var bar = document.getElementById('timeline-bar');
     bar.innerHTML = '';
+    bar.style.height = totalHeight() + 'px';
 
-    zones.forEach(function (zone, i) {
+    var segs = buildVisualSegments();
+    var cumMin = 0;
+    var boundaries = [];
+
+    segs.forEach(function (vs, k) {
+      var topPx = Math.round(cumMin * pxPerMin());
+      cumMin += vs.lenMin;
+      var botPx = Math.round(cumMin * pxPerMin());
+
       var seg = document.createElement('div');
-      seg.className = 'timeline__segment timeline__segment--' + zone.color;
-      seg.style.height = (px(zone.end) - px(zone.start)) + 'px';
+      seg.className = 'timeline__segment timeline__segment--' + vs.color;
+      seg.style.height = (botPx - topPx) + 'px';
       seg.style.cursor = 'pointer';
 
-      // Single click: split zone at click position. Double click: cycle color.
-      seg.addEventListener('click', function (e) {
-        if (pendingClick) { return; }
-        var y = e.clientY - bar.getBoundingClientRect().top;
-        pendingClick = setTimeout(function () {
-          pendingClick = null;
-          splitZone(i, y);
-        }, 220);
-      });
-      seg.addEventListener('dblclick', function () {
-        if (pendingClick) { clearTimeout(pendingClick); pendingClick = null; }
-        cycleZoneColor(i);
-      });
+      (function (zoneIndex) {
+        // Single click: split zone at click position. Double click: cycle color.
+        seg.addEventListener('click', function (e) {
+          if (pendingClick) { return; }
+          var y = e.clientY - bar.getBoundingClientRect().top;
+          pendingClick = setTimeout(function () {
+            pendingClick = null;
+            splitZone(zoneIndex, y);
+          }, 220);
+        });
+        seg.addEventListener('dblclick', function () {
+          if (pendingClick) { clearTimeout(pendingClick); pendingClick = null; }
+          cycleZoneColor(zoneIndex);
+        });
+      })(vs.zoneIndex);
 
       bar.appendChild(seg);
+
+      // A draggable boundary sits at the bottom of this segment when it ends on
+      // a real zone boundary, isn't the bottom seam, and isn't midnight (the
+      // fixed wrap point, which can't be moved).
+      if (k < segs.length - 1 && vs.endsAtZoneBoundary && zones[vs.zoneIndex].end !== MINUTES_DAY) {
+        boundaries.push({ zoneIndex: vs.zoneIndex, pxTop: botPx });
+      }
     });
 
-    // Boundary drag handles (internal boundaries only)
-    for (var i = 0; i < zones.length - 1; i++) {
-      bar.appendChild(makeBoundaryHandle(i));
-    }
+    boundaries.forEach(function (b) {
+      bar.appendChild(makeBoundaryHandle(b.zoneIndex, b.pxTop));
+    });
 
     // Grid lines overlay the bar; re-added here so they persist across
     // zone re-renders (drag, split, color cycle, reset).
     renderGridlines(bar);
   }
 
-  function makeBoundaryHandle(index) {
+  function makeBoundaryHandle(index, pxTop) {
     var handle = document.createElement('div');
-    var y = px(zones[index].end);
     handle.style.cssText = 'position:absolute; left:0; width:100%; height:8px; top:' +
-      (y - 4) + 'px; cursor:ns-resize; z-index:5;';
+      (pxTop - 4) + 'px; cursor:ns-resize; z-index:5;';
 
     // Grab line: hidden by default so zone blocks read as clean borderless
     // color blocks; revealed on hover as a drag affordance.
@@ -274,7 +337,7 @@
     function move(ev) {
       ev.preventDefault();
       var y = eventClientY(ev) - bar.getBoundingClientRect().top;
-      var minutes = Math.round((y / PX_PER_MIN) / SNAP) * SNAP;
+      var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
       var min = zones[index].start + SNAP;
       var max = zones[index + 1].end - SNAP;
       if (minutes < min) minutes = min;
@@ -299,7 +362,7 @@
 
   function splitZone(index, y) {
     var zone = zones[index];
-    var minutes = Math.round((y / PX_PER_MIN) / SNAP) * SNAP;
+    var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
     // need room for a zone on each side
     if (minutes < zone.start + SNAP || minutes > zone.end - SNAP) return;
     zones.splice(index, 1,
@@ -327,35 +390,57 @@
     return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
   }
 
-  // Labels are spaced at the selected meeting duration interval.
+  // One label per duration block, starting at startMin and wrapping past midnight.
   function renderTimeLabels() {
     var labels = document.getElementById('timeline-labels');
+    var nowCol = document.getElementById('now-col');
+    var h = totalHeight();
     labels.innerHTML = '';
-    for (var min = 0; min <= MINUTES_DAY; min += duration) {
+    labels.style.height = h + 'px';
+    if (nowCol) nowCol.style.height = h + 'px';
+
+    var blocks = MINUTES_DAY / duration;
+    for (var k = 0; k <= blocks; k++) {
+      var absMin = (startMin + k * duration) % MINUTES_DAY;
       var lab = document.createElement('div');
       lab.className = 'timeline__time-label';
-      lab.textContent = formatHM(min);
-      lab.style.cssText = 'position:absolute; right:0; top:' + px(min) + 'px; height:auto; transform:translateY(-50%);';
+      lab.textContent = formatHM(absMin);
+      lab.style.cssText = 'position:absolute; right:0; top:' + (k * BLOCK_PX) + 'px; height:auto; transform:translateY(-50%);';
       labels.appendChild(lab);
     }
   }
 
-  // Horizontal grid lines across the timeline bar at each label interval.
+  // One horizontal grid line per duration block boundary.
   function renderGridlines(bar) {
     bar.querySelectorAll('.timeline__gridline').forEach(function (g) { g.remove(); });
-    for (var min = 0; min <= MINUTES_DAY; min += duration) {
+    var blocks = MINUTES_DAY / duration;
+    for (var k = 0; k <= blocks; k++) {
       var gl = document.createElement('div');
       gl.className = 'timeline__gridline';
-      gl.style.top = px(min) + 'px';
+      gl.style.top = (k * BLOCK_PX) + 'px';
       bar.appendChild(gl);
     }
   }
 
+  function positionNowMarker(cur) {
+    var marker = document.getElementById('now-marker');
+    if (!marker) return;
+    if (cur == null) { var t = getTimeInTz(homeCity.timezone); cur = t.h * 60 + t.m; }
+    marker.style.top = Math.round(offsetMinutes(cur) * pxPerMin()) + 'px';
+  }
+
+  // Recompute the bar start each tick; re-render the timeline only when the
+  // current time crosses into a new block. Always reposition the Now marker.
   function renderNow() {
     var t = getTimeInTz(homeCity.timezone);
-    var minutes = t.h * 60 + t.m;
-    var marker = document.getElementById('now-marker');
-    if (marker) marker.style.top = px(minutes) + 'px';
+    var cur = t.h * 60 + t.m;
+    var newStart = Math.floor(cur / duration) * duration;
+    if (newStart !== startMin) {
+      startMin = newStart;
+      renderTimeLabels();
+      renderZones();
+    }
+    positionNowMarker(cur);
   }
 
   // ---------------------------------------------------------------
@@ -417,15 +502,20 @@
     activateTab('tab-setting');
 
     wireSettingTab();
+    computeStartMin();
     renderTimeLabels();
     renderDuration();
     renderZones();
+    positionNowMarker();
 
     loadCities().then(function () {
       detectHomeCity();
       renderHomeCityField();
       selectedDate = todayInTz(homeCity.timezone);
       renderDate();
+      computeStartMin();
+      renderTimeLabels();
+      renderZones();
       renderNow();
     });
 
