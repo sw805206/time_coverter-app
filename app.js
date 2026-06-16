@@ -322,6 +322,11 @@
     // Grid lines overlay the bar; re-added here so they persist across
     // zone re-renders (drag, split, color cycle, reset).
     renderGridlines(bar);
+
+    // Now marker lives inside the bar so it spans the bar width only; re-attach
+    // it after the bar is rebuilt, then restore its position.
+    var nm = getNowMarker();
+    if (nm) { bar.appendChild(nm); positionNowMarker(); }
   }
 
   function makeBoundaryHandle(index, pxTop) {
@@ -462,24 +467,23 @@
     }
   }
 
+  // Cached so it survives bar.innerHTML clears in renderZones. The marker lives
+  // inside the color bar so it spans the bar width only; the "Now" label sits
+  // just outside the bar to the right.
+  var nowMarkerEl = null;
+  function getNowMarker() {
+    if (!nowMarkerEl) nowMarkerEl = document.getElementById('now-marker');
+    if (nowMarkerEl && !nowMarkerEl.querySelector('.now-marker__label')) {
+      nowMarkerEl.innerHTML = '<div class="now-marker__label">Now</div>';
+    }
+    return nowMarkerEl;
+  }
+
   function positionNowMarker(cur) {
-    var marker = document.getElementById('now-marker');
-    var pill = document.getElementById('now-pill');
+    var marker = getNowMarker();
     if (!marker) return;
     if (cur == null) { var t = getTimeInTz(homeCity.timezone); cur = t.h * 60 + t.m; }
     marker.style.top = Math.round(offsetMinutes(cur) * pxPerMin()) + 'px';
-    if (pill) {
-      pill.textContent = formatHM(cur);
-      // Align the pill's left edge with the axis time labels' left edge so the
-      // pill replaces the label in the same column (labels are right-aligned).
-      var wrap = document.getElementById('timeline-wrap');
-      var lab = document.querySelector('#timeline-labels .timeline__time-label');
-      if (wrap && lab) {
-        var wr = wrap.getBoundingClientRect();
-        var lr = lab.getBoundingClientRect();
-        if (wr.width > 0) pill.style.left = Math.round(lr.left - wr.left) + 'px';
-      }
-    }
   }
 
   // Recompute the bar start each tick; re-render the timeline only when the
