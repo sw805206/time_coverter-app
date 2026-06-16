@@ -1,5 +1,5 @@
 /* ============================================================
-   Timezone Meeting Scheduler â€” style.css
+   Timezone Meeting Scheduler — style.css
    Theme: Pure Minimal (D)
    ============================================================ */
 
@@ -18,13 +18,13 @@
   --page-bg:      #F5F5F5;
   --white:        #FFFFFF;
 
-  /* Zone colors â€” background */
+  /* Zone colors — background */
   --zone-red-bg:        #FFCDD2;
   --zone-yellow-bg:     #FFF9C4;
   --zone-lgreen-bg:     #C8E6C9;
   --zone-dgreen-bg:     #388E3C;
 
-  /* Zone colors â€” text */
+  /* Zone colors — text */
   --zone-red-text:      #B71C1C;
   --zone-yellow-text:   #7A6200;
   --zone-lgreen-text:   #1B5E20;
@@ -509,7 +509,7 @@ html, body {
 }
 
 /* ------------------------------------------------------------
-   Slot Grid (Tab 3 â€” Recommended Slots)
+   Slot Grid (Tab 3 — Recommended Slots)
    ------------------------------------------------------------ */
 .slots-header {
   display: flex;
@@ -591,7 +591,7 @@ html, body {
 }
 
 /* ------------------------------------------------------------
-   Responsive â€” Mobile
+   Responsive — Mobile
    ------------------------------------------------------------ */
 @media (max-width: 480px) {
   .city-col__name {
