@@ -8,7 +8,7 @@
   // Constants
   // ---------------------------------------------------------------
   var MINUTES_DAY = 1440;
-  var BLOCK_PX = 24;              // pixel height of one duration block
+  var BLOCK_PX = 32;              // pixel height of one duration block
   var SNAP = 30;                  // zone boundary snap, in minutes
   var COLORS = ['red', 'yellow', 'lgreen', 'dgreen'];
 
