@@ -7,20 +7,78 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app-frame">
+  <div class="app-container">
+    <div class="app-frame">
     <nav class="nav">
       <button class="nav__tab nav__tab--active" data-tab="tab-setting">Setting</button>
       <button class="nav__tab" data-tab="tab-cities">Cities</button>
       <button class="nav__tab" data-tab="tab-slots">Slots</button>
       <span class="nav__spacer"></span>
-      <button class="btn btn--secondary" id="restart-btn">Restart</button>
+      <button class="nav__restart" id="restart-btn">Restart</button>
     </nav>
 
     <main class="app-body">
-      <section class="tab-content active" id="tab-setting"></section>
+      <section class="tab-content active" id="tab-setting">
+        <!-- Fields row -->
+        <div class="setting-fields" style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:24px;">
+          <div style="position:relative;">
+            <div class="text-label-md" style="margin-bottom:4px;">Home City</div>
+            <div class="field field--city" id="home-city-field" style="cursor:pointer; min-width:180px;">
+              <span class="field__iata" id="home-city-iata">—</span>
+              <span class="field__pipe">|</span>
+              <span class="field__city-name" id="home-city-name">Detecting…</span>
+            </div>
+            <div id="city-dropdown" style="display:none; position:absolute; top:calc(100% + 4px); left:0; z-index:200; width:240px; background:var(--white); border:0.5px solid var(--border); border-radius:var(--radius-input); overflow:hidden;">
+              <input type="text" id="city-search" placeholder="Search city or code…" autocomplete="off" style="width:100%; box-sizing:border-box; border:none; border-bottom:0.5px solid var(--divider); padding:6px 10px; font-size:13px; font-family:var(--font); outline:none;">
+              <div id="city-results" style="max-height:240px; overflow-y:auto;"></div>
+            </div>
+          </div>
+
+          <div style="position:relative;">
+            <div class="text-label-md" style="margin-bottom:4px;">Date</div>
+            <div class="field" id="date-field" style="cursor:pointer; min-width:150px;">
+              <span id="date-display">—</span>
+            </div>
+            <input type="date" id="date-input" style="position:absolute; left:0; bottom:0; opacity:0; width:1px; height:1px; pointer-events:none;">
+          </div>
+
+          <div>
+            <div class="text-label-md" style="margin-bottom:4px;">Duration</div>
+            <div class="field" id="duration-field" style="cursor:pointer; min-width:90px;">
+              <span id="duration-display">30 Min</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Availability zone editor -->
+        <div class="text-section-title" style="margin-bottom:12px;">Set 24 Hour Availability</div>
+        <div style="display:flex; gap:16px; align-items:flex-start;">
+          <div id="now-col" style="position:relative; width:54px; height:480px; flex-shrink:0;">
+            <div class="timeline__now" id="now-marker" style="position:absolute; right:0; top:0; transform:translateY(-50%);">Now →</div>
+          </div>
+          <div class="timeline__labels" id="timeline-labels" style="position:relative; height:480px; width:38px; flex-shrink:0;"></div>
+          <div class="timeline__bar" id="timeline-bar" style="height:480px; flex-shrink:0;"></div>
+
+          <div style="margin-left:8px; align-self:center;">
+            <div class="legend">
+              <div class="legend__item"><span class="legend__swatch legend__swatch--red"></span>Not Available</div>
+              <div class="legend__item"><span class="legend__swatch legend__swatch--yellow"></span>Prefer Not</div>
+              <div class="legend__item"><span class="legend__swatch legend__swatch--lgreen"></span>Acceptable</div>
+              <div class="legend__item"><span class="legend__swatch legend__swatch--dgreen"></span>Normal Hours</div>
+            </div>
+            <button class="btn btn--secondary" id="reset-zones-btn" style="margin-top:16px;">Reset To Default</button>
+          </div>
+        </div>
+
+        <!-- Bottom -->
+        <div class="bottom-nav" style="justify-content:flex-end;">
+          <button class="btn btn--link" id="next-cities-btn">Next: Add Cities →</button>
+        </div>
+      </section>
       <section class="tab-content" id="tab-cities"></section>
       <section class="tab-content" id="tab-slots"></section>
     </main>
+    </div>
   </div>
 
   <script src="app.js"></script>

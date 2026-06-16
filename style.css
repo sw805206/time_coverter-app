@@ -119,6 +119,12 @@ html, body {
 /* ------------------------------------------------------------
    Layout
    ------------------------------------------------------------ */
+.app-container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+}
+
 .app-frame {
   background: var(--white);
   border: 0.5px solid #DADADA;
@@ -173,6 +179,19 @@ html, body {
 
 .nav__spacer {
   flex: 1;
+}
+
+/* Quiet ghost-style restart button — same visual weight as an inactive tab */
+.nav__restart {
+  font-family: var(--font);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--grey-mid);
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  line-height: 1.4;
 }
 
 /* ------------------------------------------------------------
@@ -412,6 +431,15 @@ html, body {
   flex-direction: column;
   width: 48px;
   position: relative;
+}
+
+.timeline__gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
 }
 
 .timeline__segment {
