@@ -36,8 +36,11 @@
   var startMin = 0;              // bar top = current time rounded down to a block
   var nowTimer = null;
 
+  // Zones are stored as a cyclic list of { start, color }, sorted by start.
+  // A zone runs from its start to the next zone's start (the last zone wraps
+  // past midnight back to the first), so midnight is just another boundary.
   function cloneZones(z) {
-    return z.map(function (s) { return { start: s.start, end: s.end, color: s.color }; });
+    return z.map(function (s) { return { start: s.start, color: s.color }; });
   }
 
   // ---------------------------------------------------------------
@@ -226,11 +229,25 @@
     startMin = Math.floor(cur / duration) * duration;
   }
 
+  // Clock-minute where the zone after index `i` begins (cyclic).
+  function nextStart(i) {
+    return zones[(i + 1) % zones.length].start;
+  }
+
+  // Minutes from `from` forward to `to`, wrapping past midnight (0 -> full day).
+  function forwardSpan(from, to) {
+    var d = ((to - from) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+    return d === 0 ? MINUTES_DAY : d;
+  }
+
   function zoneIndexAt(absMin) {
-    for (var i = 0; i < zones.length; i++) {
-      if (absMin >= zones[i].start && absMin < zones[i].end) return i;
+    var n = zones.length;
+    for (var i = 0; i < n; i++) {
+      var s = zones[i].start, e = nextStart(i);
+      if (s < e) { if (absMin >= s && absMin < e) return i; }
+      else { if (absMin >= s || absMin < e) return i; } // zone wraps past midnight
     }
-    return zones.length - 1;
+    return n - 1;
   }
 
   // Walk 24h forward from startMin, producing the visible (possibly wrapped)
@@ -242,8 +259,7 @@
     var guard = 0;
     while (remaining > 0 && guard++ < 1000) {
       var idx = zoneIndexAt(cursor);
-      var avail = zones[idx].end - cursor;
-      if (avail <= 0) { cursor = 0; continue; }
+      var avail = forwardSpan(cursor, nextStart(idx));
       var len = Math.min(avail, remaining);
       segs.push({ color: zones[idx].color, lenMin: len, zoneIndex: idx, endsAtZoneBoundary: (len === avail) });
       cursor = (cursor + len) % MINUTES_DAY;
@@ -292,10 +308,10 @@
       bar.appendChild(seg);
 
       // A draggable boundary sits at the bottom of this segment when it ends on
-      // a real zone boundary, isn't the bottom seam, and isn't midnight (the
-      // fixed wrap point, which can't be moved).
-      if (k < segs.length - 1 && vs.endsAtZoneBoundary && zones[vs.zoneIndex].end !== MINUTES_DAY) {
-        boundaries.push({ zoneIndex: vs.zoneIndex, pxTop: botPx });
+      // a real zone boundary and isn't the bottom seam. Midnight is no longer a
+      // special case — it is just the boundary owned by the next zone's start.
+      if (k < segs.length - 1 && vs.endsAtZoneBoundary) {
+        boundaries.push({ zoneIndex: (vs.zoneIndex + 1) % zones.length, pxTop: botPx });
       }
     });
 
@@ -338,6 +354,9 @@
     e.preventDefault();
     e.stopPropagation();
     var bar = document.getElementById('timeline-bar');
+    // Hold the zone object so we can follow it even after the array is re-sorted
+    // (a boundary may wrap past midnight, changing array order).
+    var movingZone = zones[index];
 
     function move(ev) {
       ev.preventDefault();
@@ -347,21 +366,26 @@
       if (y < 0) y = 0;
       if (y > H) y = H;
 
-      var L = zones[index], R = zones[index + 1];
+      var n = zones.length;
+      var j = zones.indexOf(movingZone);
+      if (j < 0) return;
+      var prev = zones[(j - 1 + n) % n];  // boundary above (start of the zone before)
+      var next = zones[(j + 1) % n];      // boundary below (start of the zone after)
+
       // Signed position straight from the pointer (no abs) so the boundary
       // tracks the cursor both up and down.
-      var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
+      var raw = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
 
-      // Clamp to the adjacent boundaries, keeping each neighbouring zone at
-      // least one duration block — the boundary moves freely until it hits the
-      // boundary above (L.start) or below (R.end), but cannot cross either.
-      var lo = L.start + duration;
-      var hi = R.end - duration;
-      if (minutes < lo) minutes = lo;
-      if (minutes > hi) minutes = hi;
+      // Clamp within the neighbouring boundaries (cyclically), keeping each
+      // adjacent zone at least one duration block. Works uniformly for every
+      // boundary, including midnight.
+      var span = forwardSpan(prev.start, next.start);
+      var off = ((raw - prev.start) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+      if (off < duration) off = duration;
+      if (off > span - duration) off = span - duration;
 
-      L.end = minutes;
-      R.start = minutes;
+      movingZone.start = (prev.start + off) % MINUTES_DAY;
+      zones.sort(function (a, b) { return a.start - b.start; });
       renderZones();
     }
 
@@ -381,11 +405,12 @@
   function splitZone(index, y) {
     var zone = zones[index];
     var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
-    // need room for a zone on each side
-    if (minutes < zone.start + SNAP || minutes > zone.end - SNAP) return;
-    zones.splice(index, 1,
-      { start: zone.start, end: minutes, color: zone.color },
-      { start: minutes, end: zone.end, color: zone.color });
+    // need room for a zone on each side of the new boundary (cyclic-aware)
+    var toStart = forwardSpan(zone.start, minutes);
+    var toEnd = forwardSpan(minutes, nextStart(index));
+    if (toStart < SNAP || toEnd < SNAP) return;
+    zones.push({ start: minutes, color: zone.color });
+    zones.sort(function (a, b) { return a.start - b.start; });
     renderZones();
   }
 
