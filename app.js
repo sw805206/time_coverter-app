@@ -348,30 +348,17 @@
       if (y > H) y = H;
 
       var L = zones[index], R = zones[index + 1];
+      // Signed position straight from the pointer (no abs) so the boundary
+      // tracks the cursor both up and down.
       var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
-      // Keep the boundary between its two neighbours.
-      if (minutes < L.start) minutes = L.start;
-      if (minutes > R.end) minutes = R.end;
 
-      // Collapse: if dragging makes a neighbouring zone smaller than one full
-      // duration block, that zone is removed and the other absorbs the space
-      // (keeping the surviving zone's colour). Same-colour neighbours then merge.
-      if (R.end - minutes < duration) {
-        L.end = R.end;
-        zones.splice(index + 1, 1);
-        normalizeZones();
-        renderZones();
-        up();
-        return;
-      }
-      if (minutes - L.start < duration) {
-        R.start = L.start;
-        zones.splice(index, 1);
-        normalizeZones();
-        renderZones();
-        up();
-        return;
-      }
+      // Clamp to the adjacent boundaries, keeping each neighbouring zone at
+      // least one duration block — the boundary moves freely until it hits the
+      // boundary above (L.start) or below (R.end), but cannot cross either.
+      var lo = L.start + duration;
+      var hi = R.end - duration;
+      if (minutes < lo) minutes = lo;
+      if (minutes > hi) minutes = hi;
 
       L.end = minutes;
       R.start = minutes;
@@ -411,16 +398,6 @@
   function resetZones() {
     zones = cloneZones(DEFAULT_ZONES);
     renderZones();
-  }
-
-  // Merge any adjacent zones that share a colour into a single zone.
-  function normalizeZones() {
-    for (var i = zones.length - 1; i > 0; i--) {
-      if (zones[i].color === zones[i - 1].color) {
-        zones[i - 1].end = zones[i].end;
-        zones.splice(i, 1);
-      }
-    }
   }
 
   // ---------------------------------------------------------------
