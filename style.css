@@ -433,6 +433,15 @@ html, body {
   position: relative;
 }
 
+.timeline__gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.4);
+  pointer-events: none;
+}
+
 .timeline__segment {
   height: 20px;
   width: 100%;

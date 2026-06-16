@@ -188,6 +188,8 @@
   function cycleDuration() {
     duration = duration >= 120 ? 30 : duration + 30;
     renderDuration();
+    renderTimeLabels();
+    renderGridlines(document.getElementById('timeline-bar'));
   }
 
   // ---------------------------------------------------------------
@@ -228,6 +230,10 @@
     for (var i = 0; i < zones.length - 1; i++) {
       bar.appendChild(makeBoundaryHandle(i));
     }
+
+    // Grid lines overlay the bar; re-added here so they persist across
+    // zone re-renders (drag, split, color cycle, reset).
+    renderGridlines(bar);
   }
 
   function makeBoundaryHandle(index) {
@@ -313,15 +319,32 @@
   // ---------------------------------------------------------------
   // Time labels + Now marker
   // ---------------------------------------------------------------
+  function formatHM(minutes) {
+    var h = Math.floor(minutes / 60), m = minutes % 60;
+    return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+  }
+
+  // Labels are spaced at the selected meeting duration interval.
   function renderTimeLabels() {
     var labels = document.getElementById('timeline-labels');
     labels.innerHTML = '';
-    for (var h = 0; h <= 24; h += 2) {
+    for (var min = 0; min <= MINUTES_DAY; min += duration) {
       var lab = document.createElement('div');
       lab.className = 'timeline__time-label';
-      lab.textContent = (h < 10 ? '0' + h : h) + ':00';
-      lab.style.cssText = 'position:absolute; right:0; top:' + (h * 20) + 'px; height:auto; transform:translateY(-50%);';
+      lab.textContent = formatHM(min);
+      lab.style.cssText = 'position:absolute; right:0; top:' + px(min) + 'px; height:auto; transform:translateY(-50%);';
       labels.appendChild(lab);
+    }
+  }
+
+  // Horizontal grid lines across the timeline bar at each label interval.
+  function renderGridlines(bar) {
+    bar.querySelectorAll('.timeline__gridline').forEach(function (g) { g.remove(); });
+    for (var min = 0; min <= MINUTES_DAY; min += duration) {
+      var gl = document.createElement('div');
+      gl.className = 'timeline__gridline';
+      gl.style.top = px(min) + 'px';
+      bar.appendChild(gl);
     }
   }
 
