@@ -119,6 +119,12 @@ html, body {
 /* ------------------------------------------------------------
    Layout
    ------------------------------------------------------------ */
+.app-container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 var(--sp-4);
+}
+
 .app-frame {
   background: var(--white);
   border: 0.5px solid #DADADA;
