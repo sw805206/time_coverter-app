@@ -377,19 +377,21 @@
       var prev = zones[(j - 1 + n) % n];  // boundary above (start of the zone before)
       var next = zones[(j + 1) % n];      // boundary below (start of the zone after)
 
-      // Signed position straight from the pointer (no abs) so the boundary
-      // tracks the cursor both up and down.
-      var raw = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
+      // Work entirely in OFFSET minutes from the bar start (the rotated frame),
+      // so midnight is just another point and needs no special handling.
+      var pointerOff = Math.round((y / pxPerMin()) / SNAP) * SNAP;  // 0..1440 from bar top
+      var prevOff = offsetMinutes(prev.start);
 
-      // Clamp within the neighbouring boundaries (cyclically), keeping each
-      // adjacent zone at least one duration block. Works uniformly for every
-      // boundary, including midnight.
+      // Forward distance prev -> pointer, and prev -> next, both around the bar.
       var span = forwardSpan(prev.start, next.start);
-      var off = ((raw - prev.start) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+      var off = ((pointerOff - prevOff) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+      // Keep each adjacent zone at least one duration block; cannot cross above
+      // or below. The boundary moves freely across midnight within this range.
       if (off < duration) off = duration;
       if (off > span - duration) off = span - duration;
 
-      movingZone.start = (prev.start + off) % MINUTES_DAY;
+      // Convert the offset back to an absolute minute, wrapping at midnight.
+      movingZone.start = (startMin + (prevOff + off)) % MINUTES_DAY;
       zones.sort(function (a, b) { return a.start - b.start; });
       renderZones();
     }
