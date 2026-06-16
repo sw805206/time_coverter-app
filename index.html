@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Timezone Scheduler</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-frame">
+    <nav class="nav">
+      <button class="nav__tab nav__tab--active" data-tab="tab-setting">Setting</button>
+      <button class="nav__tab" data-tab="tab-cities">Cities</button>
+      <button class="nav__tab" data-tab="tab-slots">Slots</button>
+      <span class="nav__spacer"></span>
+      <button class="btn btn--secondary" id="restart-btn">Restart</button>
+    </nav>
+
+    <main class="app-body">
+      <section class="tab-content active" id="tab-setting"></section>
+      <section class="tab-content" id="tab-cities" hidden></section>
+      <section class="tab-content" id="tab-slots" hidden></section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
