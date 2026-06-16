@@ -442,6 +442,32 @@ html, body {
   pointer-events: none;
 }
 
+/* Now marker — black line across the timeline with a time pill on the left. */
+.now-marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #111111;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.now-marker__pill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #111111;
+  color: #FFFFFF;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 10px;
+  padding: 2px 6px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
 .timeline__segment {
   height: 20px;
   width: 100%;

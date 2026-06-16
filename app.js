@@ -101,9 +101,13 @@
     }
   }
 
+  function cityLabel(c) {
+    return c.country ? c.city + ', ' + c.country : c.city;
+  }
+
   function renderHomeCityField() {
     document.getElementById('home-city-iata').textContent = homeCity.iata;
-    document.getElementById('home-city-name').textContent = homeCity.city;
+    document.getElementById('home-city-name').textContent = cityLabel(homeCity);
   }
 
   function setHomeCity(city) {
@@ -140,7 +144,8 @@
     var matches = cities.filter(function (c) {
       if (!q) return true;
       return c.iata.toLowerCase().indexOf(q) === 0 ||
-             c.city.toLowerCase().indexOf(q) !== -1;
+             c.city.toLowerCase().indexOf(q) !== -1 ||
+             (c.country && c.country.toLowerCase().indexOf(q) !== -1);
     }).slice(0, 8);
 
     if (!matches.length) {
@@ -159,7 +164,7 @@
       code.textContent = c.iata;
       var name = document.createElement('span');
       name.className = 'field__city-name';
-      name.textContent = c.city;
+      name.textContent = cityLabel(c);
       row.appendChild(code);
       row.appendChild(name);
       row.addEventListener('mouseenter', function () { row.style.background = 'var(--tag-bg)'; });
@@ -336,14 +341,40 @@
 
     function move(ev) {
       ev.preventDefault();
+      var H = totalHeight();
       var y = eventClientY(ev) - bar.getBoundingClientRect().top;
+      // Clamp to the bar edges (0 and total height).
+      if (y < 0) y = 0;
+      if (y > H) y = H;
+
+      var L = zones[index], R = zones[index + 1];
       var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
-      var min = zones[index].start + SNAP;
-      var max = zones[index + 1].end - SNAP;
-      if (minutes < min) minutes = min;
-      if (minutes > max) minutes = max;
-      zones[index].end = minutes;
-      zones[index + 1].start = minutes;
+      // Keep the boundary between its two neighbours.
+      if (minutes < L.start) minutes = L.start;
+      if (minutes > R.end) minutes = R.end;
+
+      // Collapse: if dragging makes a neighbouring zone smaller than one full
+      // duration block, that zone is removed and the other absorbs the space
+      // (keeping the surviving zone's colour). Same-colour neighbours then merge.
+      if (R.end - minutes < duration) {
+        L.end = R.end;
+        zones.splice(index + 1, 1);
+        normalizeZones();
+        renderZones();
+        up();
+        return;
+      }
+      if (minutes - L.start < duration) {
+        R.start = L.start;
+        zones.splice(index, 1);
+        normalizeZones();
+        renderZones();
+        up();
+        return;
+      }
+
+      L.end = minutes;
+      R.start = minutes;
       renderZones();
     }
 
@@ -382,6 +413,16 @@
     renderZones();
   }
 
+  // Merge any adjacent zones that share a colour into a single zone.
+  function normalizeZones() {
+    for (var i = zones.length - 1; i > 0; i--) {
+      if (zones[i].color === zones[i - 1].color) {
+        zones[i - 1].end = zones[i].end;
+        zones.splice(i, 1);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------
   // Time labels + Now marker
   // ---------------------------------------------------------------
@@ -393,11 +434,9 @@
   // One label per duration block, starting at startMin and wrapping past midnight.
   function renderTimeLabels() {
     var labels = document.getElementById('timeline-labels');
-    var nowCol = document.getElementById('now-col');
     var h = totalHeight();
     labels.innerHTML = '';
     labels.style.height = h + 'px';
-    if (nowCol) nowCol.style.height = h + 'px';
 
     var blocks = MINUTES_DAY / duration;
     for (var k = 0; k <= blocks; k++) {
@@ -410,23 +449,24 @@
     }
   }
 
-  // One horizontal grid line per duration block boundary.
+  // One horizontal grid line per full hour (independent of the duration / labels).
   function renderGridlines(bar) {
     bar.querySelectorAll('.timeline__gridline').forEach(function (g) { g.remove(); });
-    var blocks = MINUTES_DAY / duration;
-    for (var k = 0; k <= blocks; k++) {
+    for (var h = 0; h < 24; h++) {
       var gl = document.createElement('div');
       gl.className = 'timeline__gridline';
-      gl.style.top = (k * BLOCK_PX) + 'px';
+      gl.style.top = Math.round(offsetMinutes(h * 60) * pxPerMin()) + 'px';
       bar.appendChild(gl);
     }
   }
 
   function positionNowMarker(cur) {
     var marker = document.getElementById('now-marker');
+    var pill = document.getElementById('now-pill');
     if (!marker) return;
     if (cur == null) { var t = getTimeInTz(homeCity.timezone); cur = t.h * 60 + t.m; }
     marker.style.top = Math.round(offsetMinutes(cur) * pxPerMin()) + 'px';
+    if (pill) pill.textContent = formatHM(cur);
   }
 
   // Recompute the bar start each tick; re-render the timeline only when the

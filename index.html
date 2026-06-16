@@ -51,23 +51,27 @@
         </div>
 
         <!-- Availability zone editor -->
-        <div class="text-section-title" style="margin-bottom:12px;">Set 24 Hour Availability</div>
-        <div style="display:flex; gap:16px; align-items:flex-start;">
-          <div id="now-col" style="position:relative; width:54px; height:480px; flex-shrink:0;">
-            <div class="timeline__now" id="now-marker" style="position:absolute; right:0; top:0; transform:translateY(-50%);">Now →</div>
-          </div>
-          <div class="timeline__labels" id="timeline-labels" style="position:relative; height:480px; width:38px; flex-shrink:0;"></div>
-          <div class="timeline__bar" id="timeline-bar" style="height:480px; flex-shrink:0;"></div>
+        <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:10px;">
+          <div class="text-section-title">Set 24 Hour Availability</div>
+          <div id="zone-hint" style="font-size:10px; color:var(--grey-hint); text-align:right;">Drag boundaries to adjust · Double-click a zone to change color</div>
+        </div>
 
-          <div style="margin-left:8px; align-self:center;">
-            <div class="legend">
-              <div class="legend__item"><span class="legend__swatch legend__swatch--red"></span>Not Available</div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--yellow"></span>Prefer Not</div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--lgreen"></span>Acceptable</div>
-              <div class="legend__item"><span class="legend__swatch legend__swatch--dgreen"></span>Normal Hours</div>
-            </div>
-            <button class="btn btn--secondary" id="reset-zones-btn" style="margin-top:16px;">Reset To Default</button>
+        <!-- Legend + reset: horizontal row above the timeline -->
+        <div style="display:flex; align-items:center; flex-wrap:wrap; gap:16px; margin-bottom:20px;">
+          <div class="legend" style="flex-direction:row; flex-wrap:wrap; gap:16px; align-items:center;">
+            <div class="legend__item"><span class="legend__swatch legend__swatch--red"></span>Not Available</div>
+            <div class="legend__item"><span class="legend__swatch legend__swatch--yellow"></span>Prefer Not</div>
+            <div class="legend__item"><span class="legend__swatch legend__swatch--lgreen"></span>Acceptable</div>
+            <div class="legend__item"><span class="legend__swatch legend__swatch--dgreen"></span>Normal Hours</div>
           </div>
+          <button class="btn btn--secondary" id="reset-zones-btn">Reset To Default</button>
+        </div>
+
+        <!-- Timeline: time labels + zone bar, with the now marker overlaid -->
+        <div id="timeline-wrap" style="position:relative; display:inline-flex; gap:16px; align-items:flex-start;">
+          <div class="timeline__labels" id="timeline-labels" style="position:relative; width:38px; flex-shrink:0;"></div>
+          <div class="timeline__bar" id="timeline-bar" style="flex-shrink:0;"></div>
+          <div class="now-marker" id="now-marker"><div class="now-marker__pill" id="now-pill"></div></div>
         </div>
 
         <!-- Bottom -->
