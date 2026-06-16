@@ -465,8 +465,9 @@ html, body {
 }
 
 .timeline__segment {
-  height: 20px;
+  height: 48px;
   width: 100%;
+  cursor: pointer;
 }
 
 .timeline__segment:first-child {

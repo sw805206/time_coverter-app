@@ -8,8 +8,10 @@
   // Constants
   // ---------------------------------------------------------------
   var MINUTES_DAY = 1440;
-  var BLOCK_PX = 48;              // pixel height of one duration block
-  var SNAP = 30;                  // zone boundary snap, in minutes
+  var BLOCK_MINUTES = 30;        // each timeline block is 30 minutes (fixed)
+  var BLOCK_PX = 48;             // pixel height of one block (fixed)
+  var BLOCKS = MINUTES_DAY / BLOCK_MINUTES;  // 48 blocks always
+  var TOTAL_HEIGHT = BLOCKS * BLOCK_PX;      // 2304px always
   var COLORS = ['red', 'yellow', 'lgreen', 'dgreen'];
 
   var DEFAULT_ZONES = [
@@ -31,16 +33,20 @@
   var homeCity = { iata: 'UTC', city: 'Universal Time', timezone: 'UTC' };
   var selectedDate = null;        // 'yyyy-mm-dd'
   var dateManuallySet = false;
-  var duration = 60;             // default meeting duration
-  var zones = cloneZones(DEFAULT_ZONES);
-  var startMin = 0;              // bar top = current time rounded down to a block
+  var duration = 60;             // default meeting duration (affects slots, not the editor)
+  var blocks = defaultBlocks();  // 48 block colors, indexed by clock (block i = [i*30, i*30+30))
+  var barStart = 0;              // bar-top clock-minute (current time rounded down to a block)
+  var lastClickedBlock = null;   // visual index of the first click in a rotate -> fill pair
+  var lastClickedColor = null;
   var nowTimer = null;
 
-  // Zones are stored as a cyclic list of { start, color }, sorted by start.
-  // A zone runs from its start to the next zone's start (the last zone wraps
-  // past midnight back to the first), so midnight is just another boundary.
-  function cloneZones(z) {
-    return z.map(function (s) { return { start: s.start, color: s.color }; });
+  // Expand the default zones into a flat array of 48 block colors.
+  function defaultBlocks() {
+    var b = new Array(BLOCKS);
+    DEFAULT_ZONES.forEach(function (z) {
+      for (var m = z.start; m < z.end; m += BLOCK_MINUTES) b[m / BLOCK_MINUTES] = z.color;
+    });
+    return b;
   }
 
   // ---------------------------------------------------------------
@@ -197,156 +203,118 @@
   }
 
   function cycleDuration() {
+    // Duration only affects meeting-slot increments elsewhere — not the editor.
     duration = duration >= 120 ? 30 : duration + 30;
-    computeStartMin();
     renderDuration();
-    renderTimeLabels();
-    renderZones();
-    positionNowMarker();
   }
 
   // ---------------------------------------------------------------
   // Availability zone editor
   // ---------------------------------------------------------------
-  // Geometry — height scales with the selected duration (24px per block).
-  function pxPerMin() { return BLOCK_PX / duration; }
-  function totalHeight() { return (MINUTES_DAY / duration) * BLOCK_PX; }
-
-  // Pixel offset (from the bar top) of an absolute minute-of-day, accounting
-  // for the bar starting at startMin and wrapping past midnight.
+  // Pixel offset (from the bar top) of an absolute minute-of-day, accounting for
+  // the bar starting at barStart and wrapping past midnight.
   function offsetMinutes(absMin) {
-    return ((absMin - startMin) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
-  }
-  // Convert a pointer offset (px from bar top) back to an absolute minute-of-day.
-  function pixelToAbsMin(y) {
-    return ((startMin + y / pxPerMin()) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
+    return ((absMin - barStart) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
   }
 
   // Start the bar at the current home-city time, rounded DOWN to a full block.
-  function computeStartMin() {
+  function computeBarStart() {
     var t = getTimeInTz(homeCity.timezone);
     var cur = t.h * 60 + t.m;
-    startMin = Math.floor(cur / duration) * duration;
+    barStart = Math.floor(cur / BLOCK_MINUTES) * BLOCK_MINUTES;
   }
 
-  // Clock-minute where the zone after index `i` begins (cyclic).
-  function nextStart(i) {
-    return zones[(i + 1) % zones.length].start;
-  }
+  function barStartBlock() { return barStart / BLOCK_MINUTES; }
+  // Map a visual block index (0 = bar top) to its clock block index.
+  function visualToClock(v) { return (barStartBlock() + v) % BLOCKS; }
+  function nextColor(c) { return COLORS[(COLORS.indexOf(c) + 1) % COLORS.length]; }
 
-  // Minutes from `from` forward to `to`, wrapping past midnight (0 -> full day).
-  function forwardSpan(from, to) {
-    var d = ((to - from) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
-    return d === 0 ? MINUTES_DAY : d;
-  }
-
-  function zoneIndexAt(absMin) {
-    var n = zones.length;
-    for (var i = 0; i < n; i++) {
-      var s = zones[i].start, e = nextStart(i);
-      if (s < e) { if (absMin >= s && absMin < e) return i; }
-      else { if (absMin >= s || absMin < e) return i; } // zone wraps past midnight
-    }
-    return n - 1;
-  }
-
-  // Walk 24h forward from startMin, producing the visible (possibly wrapped)
-  // segments. The zone containing startMin is split across the top/bottom seam.
-  function buildVisualSegments() {
-    var segs = [];
-    var cursor = ((startMin % MINUTES_DAY) + MINUTES_DAY) % MINUTES_DAY;
-    var remaining = MINUTES_DAY;
-    var guard = 0;
-    while (remaining > 0 && guard++ < 1000) {
-      var idx = zoneIndexAt(cursor);
-      var avail = forwardSpan(cursor, nextStart(idx));
-      var len = Math.min(avail, remaining);
-      segs.push({ color: zones[idx].color, lenMin: len, zoneIndex: idx, endsAtZoneBoundary: (len === avail) });
-      cursor = (cursor + len) % MINUTES_DAY;
-      remaining -= len;
-    }
-    return segs;
-  }
-
-  var pendingClick = null;
-
-  function renderZones() {
+  // Render the 48 fixed blocks (each 30 min / 48px) from the bar top. Contiguous
+  // same-colour blocks read as one zone since blocks have no borders.
+  function renderBlocks() {
     var bar = document.getElementById('timeline-bar');
     bar.innerHTML = '';
-    bar.style.height = totalHeight() + 'px';
+    bar.style.height = TOTAL_HEIGHT + 'px';
 
-    var segs = buildVisualSegments();
-    var cumMin = 0;
-    var boundaries = [];
-
-    segs.forEach(function (vs, k) {
-      var topPx = Math.round(cumMin * pxPerMin());
-      cumMin += vs.lenMin;
-      var botPx = Math.round(cumMin * pxPerMin());
-
+    for (var v = 0; v < BLOCKS; v++) {
       var seg = document.createElement('div');
-      seg.className = 'timeline__segment timeline__segment--' + vs.color;
-      seg.style.height = (botPx - topPx) + 'px';
-      seg.style.cursor = 'pointer';
-
-      (function (zoneIndex) {
-        // Single click: split zone at click position. Double click: cycle color.
-        seg.addEventListener('click', function (e) {
-          if (pendingClick) { return; }
-          var y = e.clientY - bar.getBoundingClientRect().top;
-          pendingClick = setTimeout(function () {
-            pendingClick = null;
-            splitZone(zoneIndex, y);
-          }, 220);
-        });
-        seg.addEventListener('dblclick', function () {
-          if (pendingClick) { clearTimeout(pendingClick); pendingClick = null; }
-          cycleZoneColor(zoneIndex);
-        });
-      })(vs.zoneIndex);
-
+      seg.className = 'timeline__segment timeline__segment--' + blocks[visualToClock(v)];
       bar.appendChild(seg);
+    }
 
-      // A draggable boundary sits at the bottom of this segment when it ends on
-      // a real zone boundary and isn't the bottom seam. Midnight is no longer a
-      // special case — it is just the boundary owned by the next zone's start.
-      if (k < segs.length - 1 && vs.endsAtZoneBoundary) {
-        boundaries.push({ zoneIndex: (vs.zoneIndex + 1) % zones.length, pxTop: botPx });
-      }
-    });
-
-    boundaries.forEach(function (b) {
-      bar.appendChild(makeBoundaryHandle(b.zoneIndex, b.pxTop));
-    });
-
-    // Grid lines overlay the bar; re-added here so they persist across
-    // zone re-renders (drag, split, color cycle, reset).
+    // Grid lines overlay the bar; re-added on every render so they persist.
     renderGridlines(bar);
 
-    // Now marker lives inside the bar so it spans the bar width only; re-attach
-    // it after the bar is rebuilt, then restore its position.
+    // Now marker lives inside the bar; re-attach it after the rebuild.
     var nm = getNowMarker();
     if (nm) { bar.appendChild(nm); positionNowMarker(); }
   }
 
-  function makeBoundaryHandle(index, pxTop) {
-    var handle = document.createElement('div');
-    handle.style.cssText = 'position:absolute; left:0; width:100%; height:8px; top:' +
-      (pxTop - 4) + 'px; cursor:ns-resize; z-index:5;';
+  function clampBlock(v) { return Math.max(0, Math.min(BLOCKS - 1, v)); }
+  function blockFromY(y) { return clampBlock(Math.floor(y / BLOCK_PX)); }
+  function borderFromY(y) { return Math.max(0, Math.min(BLOCKS, Math.round(y / BLOCK_PX))); }
 
-    // Grab line: hidden by default so zone blocks read as clean borderless
-    // color blocks; revealed on hover as a drag affordance.
-    var line = document.createElement('div');
-    line.style.cssText = 'position:absolute; left:0; right:0; top:3px; height:1px; background:rgba(0,0,0,0.35); opacity:0; transition:opacity 0.12s ease;';
-    handle.appendChild(line);
+  // Single pointer handler for the whole bar: a tap rotates/fills a block, a
+  // drag that starts on a colour border reassigns the blocks it sweeps across.
+  function onBarPointerDown(e) {
+    var bar = document.getElementById('timeline-bar');
+    var rect = bar.getBoundingClientRect();
+    var y0 = eventClientY(e) - rect.top;
+    var startBlock = blockFromY(y0);
 
-    handle.addEventListener('mouseenter', function () { line.style.opacity = '1'; });
-    handle.addEventListener('mouseleave', function () { line.style.opacity = '0'; });
-    handle.addEventListener('mousedown', function (e) { startBoundaryDrag(e, index); });
-    handle.addEventListener('touchstart', function (e) { startBoundaryDrag(e, index); }, { passive: false });
-    // prevent split-click when interacting with a boundary
-    handle.addEventListener('click', function (e) { e.stopPropagation(); });
-    return handle;
+    // The border the pointer is nearest, and whether it separates two colours.
+    var borderV = borderFromY(y0);
+    var aboveColor = borderV > 0 ? blocks[visualToClock(borderV - 1)] : null;
+    var belowColor = borderV < BLOCKS ? blocks[visualToClock(borderV)] : null;
+    var isBoundary = borderV > 0 && borderV < BLOCKS && aboveColor !== belowColor;
+
+    var snapshot = blocks.slice();
+    var moved = false, dragged = false;
+    if (e.type === 'mousedown') e.preventDefault();
+
+    function move(ev) {
+      var y = eventClientY(ev) - rect.top;
+      if (y < 0) y = 0;
+      if (y > TOTAL_HEIGHT) y = TOTAL_HEIGHT;
+      if (Math.abs(y - y0) >= 5) moved = true;
+      if (!isBoundary || !moved) return;
+      ev.preventDefault();
+      dragged = true;
+      var bN = borderFromY(y);
+      blocks = snapshot.slice();
+      var i;
+      if (bN > borderV) { for (i = borderV; i < bN; i++) blocks[visualToClock(i)] = aboveColor; }
+      else if (bN < borderV) { for (i = bN; i < borderV; i++) blocks[visualToClock(i)] = belowColor; }
+      renderBlocks();
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.removeEventListener('touchmove', move);
+      document.removeEventListener('touchend', up);
+      if (!moved && !dragged) handleBlockClick(startBlock);
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', up);
+  }
+
+  // Click: first click rotates a block's colour; the next click fills the range
+  // between the two clicked blocks with that colour, then resets.
+  function handleBlockClick(v) {
+    if (lastClickedBlock === null) {
+      var c = visualToClock(v);
+      blocks[c] = nextColor(blocks[c]);
+      lastClickedColor = blocks[c];
+      lastClickedBlock = v;
+    } else {
+      var m = Math.min(lastClickedBlock, v), n = Math.max(lastClickedBlock, v);
+      for (var i = m; i <= n; i++) blocks[visualToClock(i)] = lastClickedColor;
+      lastClickedBlock = null;
+      lastClickedColor = null;
+    }
+    renderBlocks();
   }
 
   function eventClientY(e) {
@@ -355,81 +323,11 @@
     return e.clientY;
   }
 
-  function startBoundaryDrag(e, index) {
-    e.preventDefault();
-    e.stopPropagation();
-    var bar = document.getElementById('timeline-bar');
-    // Hold the zone object so we can follow it even after the array is re-sorted
-    // (a boundary may wrap past midnight, changing array order).
-    var movingZone = zones[index];
-
-    function move(ev) {
-      ev.preventDefault();
-      var H = totalHeight();
-      var y = eventClientY(ev) - bar.getBoundingClientRect().top;
-      // Clamp to the bar edges (0 and total height).
-      if (y < 0) y = 0;
-      if (y > H) y = H;
-
-      var n = zones.length;
-      var j = zones.indexOf(movingZone);
-      if (j < 0) return;
-      var prev = zones[(j - 1 + n) % n];  // boundary above (start of the zone before)
-      var next = zones[(j + 1) % n];      // boundary below (start of the zone after)
-
-      // Work entirely in OFFSET minutes from the bar start (the rotated frame),
-      // so midnight is just another point and needs no special handling.
-      var pointerOff = Math.round((y / pxPerMin()) / SNAP) * SNAP;  // 0..1440 from bar top
-      var prevOff = offsetMinutes(prev.start);
-
-      // Forward distance prev -> pointer, and prev -> next, both around the bar.
-      var span = forwardSpan(prev.start, next.start);
-      var off = ((pointerOff - prevOff) % MINUTES_DAY + MINUTES_DAY) % MINUTES_DAY;
-      // Keep each adjacent zone at least one duration block; cannot cross above
-      // or below. The boundary moves freely across midnight within this range.
-      if (off < duration) off = duration;
-      if (off > span - duration) off = span - duration;
-
-      // Convert the offset back to an absolute minute, wrapping at midnight.
-      movingZone.start = (startMin + (prevOff + off)) % MINUTES_DAY;
-      zones.sort(function (a, b) { return a.start - b.start; });
-      renderZones();
-    }
-
-    function up() {
-      document.removeEventListener('mousemove', move);
-      document.removeEventListener('mouseup', up);
-      document.removeEventListener('touchmove', move);
-      document.removeEventListener('touchend', up);
-    }
-
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', up);
-    document.addEventListener('touchmove', move, { passive: false });
-    document.addEventListener('touchend', up);
-  }
-
-  function splitZone(index, y) {
-    var zone = zones[index];
-    var minutes = Math.round(pixelToAbsMin(y) / SNAP) * SNAP;
-    // need room for a zone on each side of the new boundary (cyclic-aware)
-    var toStart = forwardSpan(zone.start, minutes);
-    var toEnd = forwardSpan(minutes, nextStart(index));
-    if (toStart < SNAP || toEnd < SNAP) return;
-    zones.push({ start: minutes, color: zone.color });
-    zones.sort(function (a, b) { return a.start - b.start; });
-    renderZones();
-  }
-
-  function cycleZoneColor(index) {
-    var next = (COLORS.indexOf(zones[index].color) + 1) % COLORS.length;
-    zones[index].color = COLORS[next];
-    renderZones();
-  }
-
   function resetZones() {
-    zones = cloneZones(DEFAULT_ZONES);
-    renderZones();
+    blocks = defaultBlocks();
+    lastClickedBlock = null;
+    lastClickedColor = null;
+    renderBlocks();
   }
 
   // ---------------------------------------------------------------
@@ -440,20 +338,18 @@
     return (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
   }
 
-  // One label per duration block, starting at startMin and wrapping past midnight.
+  // One label per full hour (every 2 blocks / 60 min), anchored to clock hours.
   function renderTimeLabels() {
     var labels = document.getElementById('timeline-labels');
-    var h = totalHeight();
     labels.innerHTML = '';
-    labels.style.height = h + 'px';
-
-    var blocks = MINUTES_DAY / duration;
-    for (var k = 0; k <= blocks; k++) {
-      var absMin = (startMin + k * duration) % MINUTES_DAY;
+    labels.style.height = TOTAL_HEIGHT + 'px';
+    for (var h = 0; h < 24; h++) {
+      var absMin = h * 60;
       var lab = document.createElement('div');
       lab.className = 'timeline__time-label';
       lab.textContent = formatHM(absMin);
-      lab.style.cssText = 'position:absolute; right:0; top:' + (k * BLOCK_PX) + 'px; height:auto; transform:translateY(-50%);';
+      lab.style.cssText = 'position:absolute; right:0; top:' +
+        Math.round(offsetMinutes(absMin) / BLOCK_MINUTES * BLOCK_PX) + 'px; height:auto; transform:translateY(-50%);';
       labels.appendChild(lab);
     }
   }
@@ -464,12 +360,12 @@
     for (var h = 0; h < 24; h++) {
       var gl = document.createElement('div');
       gl.className = 'timeline__gridline';
-      gl.style.top = Math.round(offsetMinutes(h * 60) * pxPerMin()) + 'px';
+      gl.style.top = Math.round(offsetMinutes(h * 60) / BLOCK_MINUTES * BLOCK_PX) + 'px';
       bar.appendChild(gl);
     }
   }
 
-  // Cached so it survives bar.innerHTML clears in renderZones. The marker lives
+  // Cached so it survives bar.innerHTML clears in renderBlocks. The marker lives
   // inside the color bar so it spans the bar width only; the "Now" label sits
   // just outside the bar to the right.
   var nowMarkerEl = null;
@@ -485,7 +381,7 @@
     var marker = getNowMarker();
     if (!marker) return;
     if (cur == null) { var t = getTimeInTz(homeCity.timezone); cur = t.h * 60 + t.m; }
-    marker.style.top = Math.round(offsetMinutes(cur) * pxPerMin()) + 'px';
+    marker.style.top = Math.round(offsetMinutes(cur) / BLOCK_MINUTES * BLOCK_PX) + 'px';
   }
 
   // Recompute the bar start each tick; re-render the timeline only when the
@@ -493,11 +389,11 @@
   function renderNow() {
     var t = getTimeInTz(homeCity.timezone);
     var cur = t.h * 60 + t.m;
-    var newStart = Math.floor(cur / duration) * duration;
-    if (newStart !== startMin) {
-      startMin = newStart;
+    var newStart = Math.floor(cur / BLOCK_MINUTES) * BLOCK_MINUTES;
+    if (newStart !== barStart) {
+      barStart = newStart;
       renderTimeLabels();
-      renderZones();
+      renderBlocks();
     }
     positionNowMarker(cur);
   }
@@ -542,6 +438,11 @@
     document.getElementById('next-cities-btn').addEventListener('click', function () {
       activateTab('tab-cities');
     });
+
+    // Single pointer handler on the bar drives both tap (rotate/fill) and drag.
+    var bar = document.getElementById('timeline-bar');
+    bar.addEventListener('mousedown', onBarPointerDown);
+    bar.addEventListener('touchstart', onBarPointerDown, { passive: false });
   }
 
   // ---------------------------------------------------------------
@@ -561,10 +462,10 @@
     activateTab('tab-setting');
 
     wireSettingTab();
-    computeStartMin();
+    computeBarStart();
     renderTimeLabels();
     renderDuration();
-    renderZones();
+    renderBlocks();
     positionNowMarker();
 
     loadCities().then(function () {
@@ -572,9 +473,9 @@
       renderHomeCityField();
       selectedDate = todayInTz(homeCity.timezone);
       renderDate();
-      computeStartMin();
+      computeBarStart();
       renderTimeLabels();
-      renderZones();
+      renderBlocks();
       renderNow();
     });
 
