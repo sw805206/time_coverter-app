@@ -17,7 +17,6 @@
     panels.forEach(function (panel) {
       var isActive = panel.id === tabId;
       panel.classList.toggle('active', isActive);
-      panel.hidden = !isActive;
     });
   }
 
