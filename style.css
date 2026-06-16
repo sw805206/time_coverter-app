@@ -607,3 +607,14 @@ html, body {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------
+   Tab Visibility
+   ------------------------------------------------------------ */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
