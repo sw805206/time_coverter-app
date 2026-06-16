@@ -7,14 +7,14 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app-frame">
-    <div class="app-container">
+  <div class="app-container">
+    <div class="app-frame">
     <nav class="nav">
       <button class="nav__tab nav__tab--active" data-tab="tab-setting">Setting</button>
       <button class="nav__tab" data-tab="tab-cities">Cities</button>
       <button class="nav__tab" data-tab="tab-slots">Slots</button>
       <span class="nav__spacer"></span>
-      <button class="btn btn--secondary" id="restart-btn">Restart</button>
+      <button class="nav__restart" id="restart-btn">Restart</button>
     </nav>
 
     <main class="app-body">
@@ -59,7 +59,7 @@
           <div class="timeline__labels" id="timeline-labels" style="position:relative; height:480px; width:38px; flex-shrink:0;"></div>
           <div class="timeline__bar" id="timeline-bar" style="height:480px; flex-shrink:0;"></div>
 
-          <div style="margin-left:8px;">
+          <div style="margin-left:8px; align-self:center;">
             <div class="legend">
               <div class="legend__item"><span class="legend__swatch legend__swatch--red"></span>Not Available</div>
               <div class="legend__item"><span class="legend__swatch legend__swatch--yellow"></span>Prefer Not</div>

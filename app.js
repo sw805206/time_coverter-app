@@ -236,11 +236,14 @@
     handle.style.cssText = 'position:absolute; left:0; width:100%; height:8px; top:' +
       (y - 4) + 'px; cursor:ns-resize; z-index:5;';
 
-    // thin visible grab line
+    // Grab line: hidden by default so zone blocks read as clean borderless
+    // color blocks; revealed on hover as a drag affordance.
     var line = document.createElement('div');
-    line.style.cssText = 'position:absolute; left:0; right:0; top:3px; height:1px; background:rgba(0,0,0,0.35);';
+    line.style.cssText = 'position:absolute; left:0; right:0; top:3px; height:1px; background:rgba(0,0,0,0.35); opacity:0; transition:opacity 0.12s ease;';
     handle.appendChild(line);
 
+    handle.addEventListener('mouseenter', function () { line.style.opacity = '1'; });
+    handle.addEventListener('mouseleave', function () { line.style.opacity = '0'; });
     handle.addEventListener('mousedown', function (e) { startBoundaryDrag(e, index); });
     handle.addEventListener('touchstart', function (e) { startBoundaryDrag(e, index); }, { passive: false });
     // prevent split-click when interacting with a boundary

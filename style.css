@@ -181,6 +181,19 @@ html, body {
   flex: 1;
 }
 
+/* Quiet ghost-style restart button — same visual weight as an inactive tab */
+.nav__restart {
+  font-family: var(--font);
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--grey-mid);
+  background: transparent;
+  border: 0.5px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  line-height: 1.4;
+}
+
 /* ------------------------------------------------------------
    Buttons
    ------------------------------------------------------------ */
